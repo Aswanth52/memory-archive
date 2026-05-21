@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEMORY ARCHIVE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght=400;500;700&family=Space+Grotesk:wght=400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        :root[data-theme="dark"] {
+            --bg-main: #000000;
+            --bg-panel: #0a0a0a;
+            --border-stark: #222222;
+            --border-active: #ffffff;
+            --text-primary: #ffffff;
+            --text-muted: #777777;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --snap: 0.1s steps(2);
+        }
+        :root[data-theme="light"] {
+            --bg-main: #f8f9fa;
+            --bg-panel: #ffffff;
+            --border-stark: #dee2e6;
+            --border-active: #212529;
+            --text-primary: #212529;
+            --text-muted: #868e96;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --snap: 0.1s steps(2);
+        }
+ 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: var(--bg-main);
+            color: var(--text-primary);
+            font-family: var(--font-display);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+ 
+        .sidebar {
+            width: 280px;
+            border-right: 1px solid var(--border-stark);
+            background: var(--bg-panel);
+            padding: 40px 24px;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 10;
+        }
+        .sidebar h1 {
+            font-size: 1.4rem;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            margin-bottom: 40px;
+        }
+        .nav-group { display: flex; flex-direction: column; gap: 8px; }
+        .nav-btn {
+            padding: 14px 18px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            text-align: left;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: var(--snap);
+        }
+        .nav-btn:hover { color: var(--text-primary); background: var(--bg-main); }
+        .nav-btn.active {
+            color: var(--text-primary);
+            background: var(--bg-main);
+            border-color: var(--border-stark);
+            font-weight: 700;
+        }
+        .sidebar-footer { margin-top: auto; border-top: 1px solid var(--border-stark); padding-top: 20px; }
+ 
+        .viewport { 
+            flex: 1; 
+            padding: 60px; 
+            margin-left: 280px;
+            min-height: 100vh;
+        }
+        .panel { display: none; }
+        .panel.active { display: block; }
+ 
+        .panel-title { font-size: 1.8rem; text-transform: uppercase; margin-bottom: 8px; font-weight: 600; }
+        .panel-subtitle { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 40px; }
+ 
+        .box { background: var(--bg-panel); border: 1px solid var(--border-stark); padding: 30px; max-width: 750px; margin-bottom: 30px; }
+        .box-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); display: block; margin-bottom: 16px; font-family: var(--font-mono); }
+        .input-row { display: flex; border: 1px solid var(--border-stark); background: var(--bg-main); max-width: 750px; }
+        .input-row:focus-within { border-color: var(--border-active); }
+        .input-row input { flex: 1; padding: 14px 18px; border: none; background: transparent; color: var(--text-primary); font-size: 0.9rem; font-family: var(--font-mono); outline: none; }
+        
+        .btn { padding: 14px 28px; border: none; font-size: 0.8rem; font-weight: 600; font-family: var(--font-mono); text-transform: uppercase; cursor: pointer; }
+        .btn-white { background: var(--text-primary); color: var(--bg-main); }
+        .btn-white:hover { opacity: 0.85; }
+        .btn-red { background: transparent; color: #ff5555; border: 1px solid #331111; }
+        .btn-red:hover { background: #220000; border-color: #ff5555; }
+ 
+        .folder-group { margin-bottom: 48px; width: 100%; }
+        .folder-banner { font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; color: var(--text-primary); margin-bottom: 20px; border-left: 3px solid var(--border-active); padding-left: 10px; word-break: break-all; }
+        .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
+        
+        .photo-card { background: var(--bg-panel); border: 1px solid var(--border-stark); padding: 10px; position: relative; }
+        .photo-card:hover { border-color: var(--border-active); }
+        .media-container { 
+            width: 100%; 
+            height: 200px; 
+            background: #0d0d0d; 
+            overflow: hidden; 
+            position: relative;
+        }
+        .media-container::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+            transform: translateX(-100%);
+            animation: loadingPulse 1.6s infinite;
+        }
+        @keyframes loadingPulse { 100% { transform: translateX(100%); } }
+ 
+        .photo-card img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            display: block; 
+            cursor: pointer; 
+            filter: grayscale(10%); 
+            position: relative;
+            z-index: 1;
+            background: var(--bg-panel);
+        }
+        .photo-card:hover img { filter: grayscale(0%); }
+        
+        .photo-card .card-info { padding: 12px 2px 2px; }
+        .card-filename { font-size: 0.72rem; font-family: var(--font-mono); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 12px; }
+        .card-actions { display: flex; gap: 8px; align-items: center; }
+        .card-score { font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); flex: 1; }
+        .btn-download { padding: 6px 12px; border: 1px solid var(--border-stark); background: transparent; color: var(--text-primary); font-size: 0.68rem; font-family: var(--font-mono); text-transform: uppercase; cursor: pointer; }
+        .btn-download:hover { background: var(--text-primary); color: var(--bg-main); }
+ 
+        .face-upload-area { border: 1px dashed var(--border-stark); padding: 40px; text-align: center; cursor: pointer; margin-bottom: 24px; background: var(--bg-main); transition: border-color 0.1s; }
+        .face-upload-area:hover, .face-upload-area.drag-over { border-color: var(--border-active); }
+        .face-upload-area img { max-height: 160px; margin-top: 16px; border: 1px solid var(--border-stark); }
+        .face-upload-area p { color: var(--text-muted); font-size: 0.8rem; font-family: var(--font-mono); text-transform: uppercase; }
+        .people-grid { display: flex; flex-direction: column; gap: 16px; }
+        .person-card { background: var(--bg-main); border: 1px solid var(--border-stark); padding: 16px; }
+ 
+        .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; gap: 24px; }
+        .lightbox.active { display: flex; }
+        .lightbox img { max-width: 85vw; max-height: 70vh; border: 1px solid #222; background: #000; }
+        .lightbox-filename { color: var(--text-muted); font-size: 0.8rem; font-family: var(--font-mono); }
+        .lightbox-close { position: absolute; top: 30px; right: 40px; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+        .lightbox-close:hover { color: #fff; }
+ 
+        .progress-section { display: none; margin-top: 24px; }
+        .progress-bar-bg { background: var(--bg-main); border: 1px solid var(--border-stark); height: 6px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--text-primary); width: 0%; }
+        .progress-text { font-size: 0.72rem; color: var(--text-muted); margin-top: 10px; font-family: var(--font-mono); }
+        .status-msg, .status-green { font-size: 0.72rem; margin-top: 12px; font-family: var(--font-mono); }
+        .status-green { color: #55ff55; display: none; }
+ 
+        @media (max-width: 840px) {
+            body { flex-direction: column; }
+            .sidebar { 
+                width: 100%; 
+                position: relative; 
+                height: auto; 
+                padding: 30px 20px; 
+                border-right: none; 
+                border-bottom: 1px solid var(--border-stark);
+            }
+            .sidebar h1 { margin-bottom: 20px; text-align: center; }
+            .nav-group { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; }
+            .nav-btn { padding: 10px 14px; font-size: 0.75rem; text-align: center; }
+            .viewport { margin-left: 0; padding: 30px 20px; }
+            .box { max-width: 100%; }
+            .input-row { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+ 
+    <nav class="sidebar">
+        <h1>Memory Archive</h1>
+        <div class="nav-group">
+            <button class="nav-btn active" onclick="navigate('gallery')">Gallery View</button>
+            <button class="nav-btn" onclick="navigate('search')">Search Photos</button>
+            <button class="nav-btn" onclick="navigate('profiles')">People Profiles</button>
+            <button class="nav-btn" onclick="navigate('settings')">App Setup</button>
+            <button class="nav-btn" onclick="navigate('help')">How To Use</button>
+        </div>
+        <div class="sidebar-footer">
+            <button class="nav-btn" style="width:100%" onclick="toggleTheme()" id="themeBtn">Light Mode</button>
+        </div>
+    </nav>
+ 
+    <main class="viewport">
+ 
+        <section class="panel active" id="view-gallery">
+            <div class="panel-title">Your Photo Folders</div>
+            <div class="panel-subtitle">Browse through your connected storage folders</div>
+            <div id="gallery-directories-container">
+                <p style="color:var(--text-muted); font-size:0.85rem; font-family:var(--font-mono)">Reading folders...</p>
+            </div>
+        </section>
+ 
+        <section class="panel" id="view-search">
+            <div class="panel-title">Smart Search</div>
+            <div class="panel-subtitle">Search your photos using simple, everyday descriptions</div>
+            
+            <div class="input-row">
+                <input type="text" id="searchInput" placeholder="Describe what you are looking for, like person wearing a jacket, or sunset near mountains..." />
+                <button class="btn btn-white" onclick="triggerSearch()">Search</button>
+            </div>
+ 
+            <div class="panel-subtitle" id="searchFeedback" style="margin-top:20px; margin-bottom:20px;">Type a description above to start searching...</div>
+            <div class="results" id="searchResultsGrid"></div>
+        </section>
+ 
+        <section class="panel" id="view-profiles">
+            <div class="panel-title">People Profiles</div>
+            <div class="panel-subtitle">Name a face to quickly find photos of that specific person later</div>
+            
+            <div class="box">
+                <span class="box-label">Upload a Reference Photo</span>
+                <div class="face-upload-area" id="faceDropArea" onclick="document.getElementById('faceInput').click()">
+                    <p id="uploadPrompt">Click here or drag and drop a photo</p>
+                    <img id="facePreview" style="display:none" />
+                </div>
+                <input type="file" id="faceInput" accept="image/*" style="display:none" onchange="processFacePreview(event)" />
+                
+                <div class="input-row">
+                    <input type="text" id="profileNameInput" placeholder="Enter name or person label..." />
+                    <button class="btn btn-white" onclick="commitProfileIdentity()">Save Person</button>
+                </div>
+                <div id="profileLogStatus" class="status-msg" style="display:none"></div>
+            </div>
+ 
+            <div class="box" style="max-width:100%">
+                <span class="box-label">Saved People Profiles</span>
+                <div class="people-grid" id="compiledProfilesContainer"></div>
+            </div>
+        </section>
+ 
+        <section class="panel" id="view-settings">
+            <div class="panel-title">App Setup</div>
+            <div class="panel-subtitle">Link your folders to the app</div>
+            <div class="box">
+                <span class="box-label">Folder Paths (Separate multiple paths with a comma)</span>
+                <div class="input-row" style="margin-bottom: 20px;">
+                    <input type="text" id="configFoldersInput" placeholder="e.g. C:\Folder\Path1, D:\Folder\Path2" />
+                    <button class="btn btn-white" onclick="triggerIndexingSequence('index')">Scan Folders</button>
+                </div>
+                <button class="btn btn-red" style="padding: 8px 16px; font-size: 0.7rem;" onclick="triggerIndexingSequence('reindex')">Clear Database & Rescan Everything</button>
+                
+                <div class="progress-section" id="indexProgressSection">
+                    <div class="progress-bar-bg"><div class="progress-bar-fill" id="indexProgressFill"></div></div>
+                    <div class="progress-text" id="indexProgressText">Ready to scan...</div>
+                </div>
+                <div class="status-green" id="configStatusBox"></div>
+            </div>
+        </section>
+ 
+        <section class="panel" id="view-help">
+            <div class="panel-title">Instructions & Privacy</div>
+            <div class="panel-subtitle">How this application works</div>
+            <div style="max-width: 750px; line-height: 1.6;">
+                <p style="color:var(--text-muted); margin-bottom: 20px;"><strong>How to use:</strong> Add your image folder paths in App Setup and click Scan Folders. Once the scan finishes, look through your files in Gallery View or search inside Smart Search using everyday phrasing.</p>
+                <p style="color:var(--text-muted);"><strong>Your Privacy:</strong> This application runs completely offline. None of your photos, descriptions, searches, or face entries ever leave your local computer.</p>
+            </div>
+        </section>
+ 
+    </main>
+ 
+    <div class="lightbox" id="appLightbox" onclick="closeAppLightbox()">
+        <span class="lightbox-close">x</span>
+        <div id="lightboxMediaWrapper" onclick="event.stopPropagation()"></div>
+        <div class="lightbox-filename" id="lightboxFilenameLabel"></div>
+        <div style="display:flex; gap:12px">
+            <button class="btn btn-white" style="padding:8px 16px; font-size:0.7rem;" id="lightboxDownloadBtn">Download Photo</button>
+            <button class="btn btn-white" style="padding:8px 16px; font-size:0.7rem; background:#222; color:#fff; border:1px solid #444;" id="lightboxCopyBtn">Copy File Path</button>
+        </div>
+    </div>
+ 
+    <script>
+        let activeB64String = "";
+        let indexingPollTimer = null;
+        let lightboxAbsolutePath = "";
+ 
+        function navigate(viewId) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(`view-${viewId}`).classList.add('active');
+            
+            if(event && event.target) {
+                event.target.classList.add('active');
+            }
+ 
+            if (viewId === 'gallery') fetchLocalGalleryHub();
+            if (viewId === 'profiles') renderActiveProfiles();
+        }
+ 
+        function toggleTheme() {
+            const htmlNode = document.documentElement;
+            const btn = document.getElementById('themeBtn');
+            if (htmlNode.getAttribute('data-theme') === 'dark') {
+                htmlNode.setAttribute('data-theme', 'light');
+                btn.textContent = "Dark Mode";
+            } else {
+                htmlNode.setAttribute('data-theme', 'dark');
+                btn.textContent = "Light Mode";
+            }
+        }
+ 
+        window.onload = async () => {
+            const res = await fetch('/settings');
+            const data = await res.json();
+            if (data.folders && data.folders.length > 0) {
+                document.getElementById('configFoldersInput').value = data.folders.join(', ');
+                document.getElementById('configStatusBox').style.display = 'block';
+                document.getElementById('configStatusBox').textContent = `Saved locations: ${data.folders.join(' | ')}`;
+            }
+            fetchLocalGalleryHub();
+            
+            document.getElementById('searchInput').addEventListener('keydown', e => {
+                if (e.key === 'Enter') triggerSearch();
+            });
+ 
+            // Drag and drop for face upload area
+            const dropArea = document.getElementById('faceDropArea');
+            dropArea.addEventListener('dragover', e => {
+                e.preventDefault();
+                dropArea.classList.add('drag-over');
+            });
+            dropArea.addEventListener('dragleave', () => {
+                dropArea.classList.remove('drag-over');
+            });
+            dropArea.addEventListener('drop', e => {
+                e.preventDefault();
+                dropArea.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    loadFaceFile(file);
+                }
+            });
+        };
+ 
+        function loadFaceFile(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                activeB64String = e.target.result.split(',')[1];
+                const elementImg = document.getElementById('facePreview');
+                elementImg.src = e.target.result;
+                elementImg.style.display = 'block';
+                document.getElementById('uploadPrompt').style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+ 
+        async function fetchLocalGalleryHub() {
+            const container = document.getElementById('gallery-directories-container');
+            container.innerHTML = `<p style="color:var(--text-muted); font-size:0.85rem; font-family:var(--font-mono)">Reading folders...</p>`;
+            
+            const res = await fetch('/gallery-assets');
+            const data = await res.json();
+            
+            if (Object.keys(data).length === 0) {
+                container.innerHTML = `<p style="color:var(--text-muted); font-size:0.85rem; font-family:var(--font-mono)">No folders are connected yet. Head to App Setup to add photos.</p>`;
+                return;
+            }
+ 
+            container.innerHTML = "";
+            
+            for (const [folderPath, itemsArray] of Object.entries(data)) {
+                const groupNode = document.createElement('div');
+                groupNode.className = 'folder-group';
+                groupNode.innerHTML = `
+                    <div class="folder-banner">Folder: ${folderPath} &mdash; ${itemsArray.length} items</div>
+                    <div class="results"></div>
+                `;
+                
+                const elementGrid = groupNode.querySelector('.results');
+                itemsArray.forEach(item => {
+                    const structuralCard = document.createElement('div');
+                    structuralCard.className = 'photo-card';
+                    structuralCard.innerHTML = `
+                        <div class="media-container">
+                            <img src="${item.url}" loading="lazy" />
+                        </div>
+                        <div class="card-info">
+                            <div class="card-filename" title="${item.filename}">${item.filename}</div>
+                            <div class="card-actions">
+                                <button class="btn-download" style="width:100%">View Photo</button>
+                            </div>
+                        </div>
+                    `;
+                    structuralCard.querySelector('.media-container').addEventListener('click', () => launchMediaView(item.url, item.filename, item.path));
+                    structuralCard.querySelector('button').addEventListener('click', () => launchMediaView(item.url, item.filename, item.path));
+                    elementGrid.appendChild(structuralCard);
+                });
+                container.appendChild(groupNode);
+            }
+        }
+ 
+        async function triggerIndexingSequence(endpoint) {
+            const pathsInput = document.getElementById('configFoldersInput').value.trim();
+            if(!pathsInput) return alert("Enter at least one folder location.");
+            const folders = pathsInput.split(',').map(f => f.trim()).filter(f => f.length > 0);
+ 
+            document.getElementById('indexProgressSection').style.display = 'block';
+            document.getElementById('configStatusBox').style.display = 'none';
+            document.getElementById('indexProgressText').textContent = "Preparing folder scanner...";
+ 
+            const res = await fetch(`/${endpoint}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({folders})
+            });
+            const data = await res.json();
+            if(data.error) return alert(data.error);
+ 
+            if(indexingPollTimer) clearInterval(indexingPollTimer);
+            indexingPollTimer = setInterval(pollLogs, 500);
+        }
+ 
+        async function pollLogs() {
+            const res = await fetch('/index-status');
+            const data = await res.json();
+            const pct = data.total > 0 ? Math.round((data.progress / data.total) * 100) : 0;
+            const text = data.phase === 'faces' ? 'Scanning faces inside images' : 'Reading folder details and photo visual contexts';
+            
+            document.getElementById('indexProgressFill').style.width = `${pct}%`;
+            document.getElementById('indexProgressText').textContent = `${text} — ${data.progress} / ${data.total} (${pct}%)`;
+ 
+            if(data.done) {
+                clearInterval(indexingPollTimer);
+                document.getElementById('indexProgressText').textContent = `Scan complete. Mapped ${data.total} photos.`;
+                document.getElementById('configStatusBox').style.display = 'block';
+                document.getElementById('configStatusBox').textContent = `Folders updated successfully`;
+                fetchLocalGalleryHub();
+            }
+        }
+ 
+        async function triggerSearch() {
+            const textQuery = document.getElementById('searchInput').value.trim();
+            if(!textQuery) return;
+ 
+            document.getElementById('searchFeedback').textContent = "Searching through photo database...";
+            const targetGrid = document.getElementById('searchResultsGrid');
+            targetGrid.innerHTML = "";
+ 
+            const res = await fetch(`/search?query=${encodeURIComponent(textQuery)}&top_k=40`);
+            const data = await res.json();
+            if(data.error) {
+                document.getElementById('searchFeedback').textContent = data.error;
+                return;
+            }
+ 
+            const results = data.results || data;
+            if(!results || results.length === 0) {
+                document.getElementById('searchFeedback').textContent = `No photos matched: "${textQuery}"`;
+                return;
+            }
+ 
+            document.getElementById('searchFeedback').textContent = `Found ${results.length} matches for: "${textQuery}"`;
+            results.forEach(photo => {
+                const photoCardNode = document.createElement('div');
+                photoCardNode.className = 'photo-card';
+                photoCardNode.innerHTML = `
+                    <div class="media-container"><img src="${photo.url}" loading="lazy" /></div>
+                    <div class="card-info">
+                        <div class="card-filename" title="${photo.filename}">${photo.filename}</div>
+                        <div class="card-actions">
+                            <span class="card-score">Match: ${photo.score.toFixed(4)}</span>
+                            <a href="/download?path=${encodeURIComponent(photo.path)}" download><button class="btn-download">Download</button></a>
+                        </div>
+                    </div>
+                `;
+                photoCardNode.querySelector('.media-container').addEventListener('click', () => launchMediaView(photo.url, photo.filename, photo.path));
+                targetGrid.appendChild(photoCardNode);
+            });
+        }
+ 
+        function processFacePreview(event) {
+            const targetFile = event.target.files[0];
+            if(!targetFile) return;
+            loadFaceFile(targetFile);
+        }
+ 
+        async function commitProfileIdentity() {
+            const nameKey = document.getElementById('profileNameInput').value.trim();
+            if(!nameKey || !activeB64String) return alert("Enter a name and provide a reference photo.");
+            
+            const logElement = document.getElementById('profileLogStatus');
+            logElement.style.display = 'block';
+            logElement.style.color = 'var(--text-primary)';
+            logElement.textContent = "Processing face and registering details...";
+ 
+            const res = await fetch('/register-face', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: nameKey, image: activeB64String})
+            });
+            const data = await res.json();
+            
+            if(data.error) {
+                logElement.textContent = `Error: ${data.error}`;
+                logElement.style.color = '#ff5555';
+            } else {
+                logElement.textContent = `Saved: ${data.message}`;
+                document.getElementById('profileNameInput').value = "";
+                activeB64String = "";
+                document.getElementById('facePreview').style.display = 'none';
+                document.getElementById('uploadPrompt').style.display = 'block';
+                document.getElementById('faceInput').value = "";
+                renderActiveProfiles();
+            }
+        }
+ 
+        async function renderActiveProfiles() {
+            const res = await fetch('/list-faces');
+            const data = await res.json();
+            const wrapperProfiles = document.getElementById('compiledProfilesContainer');
+            if(!data.people || data.people.length === 0) {
+                wrapperProfiles.innerHTML = `<p style="color:var(--text-muted); font-size:0.8rem; font-family:var(--font-mono)">No profiles added yet.</p>`;
+                return;
+            }
+ 
+            wrapperProfiles.innerHTML = "";
+            const dynamicCacheBuster = new Date().getTime();
+ 
+            for (const nodePerson of data.people) {
+                const photosDiskLookup = await fetch(`/face-photos?name=${encodeURIComponent(nodePerson.name)}`);
+                const photosDiskJson = await photosDiskLookup.json();
+                const actualDiskFilesArray = photosDiskJson.photos || [];
+ 
+                const cardHolder = document.createElement('div');
+                cardHolder.className = 'person-card';
+                cardHolder.innerHTML = `
+                    <div style="display:flex; gap:20px; align-items:flex-start; width:100%">
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; max-width:200px;">
+                            ${actualDiskFilesArray.map(uniqueFilename => `
+                                <img src="/face-photo?name=${encodeURIComponent(nodePerson.name)}&filename=${encodeURIComponent(uniqueFilename)}&t=${dynamicCacheBuster}"
+                                     style="width:48px; height:48px; object-fit:cover; border:1px solid var(--border-stark); cursor:pointer;" 
+                                     onclick="launchMediaView('/face-photo?name=${encodeURIComponent(nodePerson.name)}&filename=${encodeURIComponent(uniqueFilename)}&t=${dynamicCacheBuster}', '${uniqueFilename}', '')"/>
+                            `).join('')}
+                        </div>
+                        <div style="flex:1; padding-top:4px;">
+                            <div style="font-family:var(--font-mono); font-size:0.85rem; font-weight:700;">${nodePerson.name}</div>
+                            <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Photos saved: ${nodePerson.photos}</div>
+                        </div>
+                        <button class="btn btn-red" style="padding:6px 12px; font-size:0.65rem;">Delete Profile</button>
+                    </div>
+                `;
+                cardHolder.querySelector('.btn-red').addEventListener('click', () => purgeNodeTrack(nodePerson.name));
+                wrapperProfiles.appendChild(cardHolder);
+            }
+        }
+ 
+        async function purgeNodeTrack(name) {
+            if(!confirm(`Delete profile for "${name}"?`)) return;
+            await fetch(`/delete-face?name=${encodeURIComponent(name)}`, {method: 'DELETE'});
+            renderActiveProfiles();
+        }
+ 
+        function launchMediaView(srcUrl, filename, absolutePath) {
+            lightboxAbsolutePath = absolutePath || "";
+            document.getElementById('lightboxMediaWrapper').innerHTML = `<img src="${srcUrl}" />`;
+            document.getElementById('lightboxFilenameLabel').textContent = filename;
+            
+            document.getElementById('lightboxDownloadBtn').onclick = () => {
+                if(!lightboxAbsolutePath) return alert("Cannot download profile reference photos directly.");
+                window.location.href = `/download?path=${encodeURIComponent(lightboxAbsolutePath)}`;
+            };
+            
+            const copyBtn = document.getElementById('lightboxCopyBtn');
+            copyBtn.textContent = "Copy File Path";
+            copyBtn.onclick = () => {
+                const textToCopy = lightboxAbsolutePath || srcUrl;
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    copyBtn.textContent = "Copied";
+                    setTimeout(() => { copyBtn.textContent = "Copy File Path"; }, 1500);
+                });
+            };
+ 
+            document.getElementById('appLightbox').classList.add('active');
+        }
+ 
+        function closeAppLightbox() {
+            document.getElementById('appLightbox').classList.remove('active');
+        }
+    </script>
+</body>
+</html>
