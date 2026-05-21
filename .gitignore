@@ -1,0 +1,11 @@
+__pycache__/
+python_env/
+ai_models_cache/
+registered_faces/
+
+*.pkl
+*.index
+*.db
+settings.json
+
+.DS_Store
