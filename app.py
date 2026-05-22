@@ -22,8 +22,10 @@ from deepface import DeepFace
 import base64
 import shutil
 import re
+import threading
 
 app = FastAPI()
+index_lock = threading.Lock()
 
 print("Loading search engine...")
 model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
@@ -43,6 +45,18 @@ PATHS_FILE_TMP      = os.path.join(APP_ROOT, "photo_paths.pkl.tmp")
 FACE_INDEX_FILE_TMP = os.path.join(APP_ROOT, "face_index.pkl.tmp")
 
 os.makedirs(FACES_DIR, exist_ok=True)
+
+def is_path_safe(target_path: str, allowed_folders: list) -> bool:
+    """Prevent path traversal: ensures path is within allowed folders or FACES_DIR."""
+    try:
+        abs_target = os.path.abspath(target_path)
+        all_allowed = list(allowed_folders) + [os.path.abspath(FACES_DIR)]
+        for folder in all_allowed:
+            if abs_target.startswith(os.path.abspath(folder)):
+                return True
+    except Exception:
+        pass
+    return False
 
 _faces_cache      = {}
 _face_index_cache = {}
@@ -246,9 +260,10 @@ def run_indexing(folders: list):
 
     save_settings(folders)
 
-    index             = merged_index
-    photo_paths       = merged_paths
-    _face_index_cache = existing_faces
+    with index_lock:
+        index             = merged_index
+        photo_paths       = merged_paths
+        _face_index_cache = existing_faces
 
     indexing_status.update({"running": False, "done": True, "phase": ""})
 
@@ -283,7 +298,10 @@ def force_reindex(data: dict, background_tasks: BackgroundTasks):
     for f in [INDEX_FILE, PATHS_FILE, FACE_INDEX_FILE]:
         if os.path.exists(f):
             os.remove(f)
-    background_tasks.add_task(run_indexing, [f.strip() for f in folders])
+    clean_folders = [f.strip() for f in folders if isinstance(f, str) and f.strip()]
+    if not clean_folders:
+        return JSONResponse(content={"error": "No valid folder paths provided"}, status_code=400)
+    background_tasks.add_task(run_indexing, clean_folders)
     return {"message": "Database cleared. Fresh scan started"}
 
 @app.get("/index-status")
@@ -296,7 +314,11 @@ def get_settings():
 
 @app.get("/search")
 def search(query: str, top_k: int = 40):
-    if index is None:
+    with index_lock:
+        current_index = index
+        current_paths = list(photo_paths)
+
+    if current_index is None:
         return JSONResponse(content={"error": "No photos have been scanned yet. Please map folders first"}, status_code=400)
 
     faces      = _faces_cache
@@ -345,14 +367,14 @@ def search(query: str, top_k: int = 40):
         text_features /= text_features.norm(dim=-1, keepdim=True)
 
     query_vector    = text_features.cpu().numpy().astype('float32')
-    actual_k        = min(len(photo_paths), 100)
-    scores, indices = index.search(query_vector, actual_k)
+    actual_k        = min(len(current_paths), 100)
+    scores, indices = current_index.search(query_vector, actual_k)
 
     results = []
     for score, idx in zip(scores[0], indices[0]):
-        if idx == -1 or idx >= len(photo_paths):
+        if idx == -1 or idx >= len(current_paths):
             continue
-        path     = photo_paths[idx]
+        path     = current_paths[idx]
         filename = os.path.basename(path)
 
         if matched_name:
@@ -384,11 +406,11 @@ def search(query: str, top_k: int = 40):
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
-    seen_filenames = set()
+    seen_paths = set()
     unique_results = []
     for r in results:
-        if r["filename"] not in seen_filenames:
-            seen_filenames.add(r["filename"])
+        if r["path"] not in seen_paths:
+            seen_paths.add(r["path"])
             unique_results.append(r)
 
     filtered = [r for r in unique_results if r["score"] >= 0.24]
@@ -447,6 +469,9 @@ def delete_face(name: str):
 
 @app.get("/file")
 def serve_file(path: str):
+    allowed_folders = load_settings()
+    if not is_path_safe(path, allowed_folders):
+        return JSONResponse(content={"error": "Access denied"}, status_code=403)
     if not os.path.exists(path):
         return JSONResponse(content={"error": "Photo file not found on disk"}, status_code=404)
     res = FileResponse(path)
@@ -455,6 +480,9 @@ def serve_file(path: str):
 
 @app.get("/download")
 def download_file(path: str):
+    allowed_folders = load_settings()
+    if not is_path_safe(path, allowed_folders):
+        return JSONResponse(content={"error": "Access denied"}, status_code=403)
     if not os.path.exists(path):
         return JSONResponse(content={"error": "Photo file not found on disk"}, status_code=404)
     return FileResponse(path, headers={"Content-Disposition": f"attachment; filename={os.path.basename(path)}"})
